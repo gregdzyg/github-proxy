@@ -5,51 +5,44 @@ import com.githubproxy.client.dto.GithubBranch;
 import com.githubproxy.client.dto.GithubRepository;
 import com.githubproxy.controller.dto.Branch;
 import com.githubproxy.controller.dto.GithubProxyRepositoryDto;
-import lombok.extern.log4j.Log4j2;
+import com.githubproxy.service.mapper.GithubMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Log4j2
 @Service
 public class GithubService {
-
+    private final GithubMapper githubMapper;
     private final GithubFeignClient githubFeignClient;
 
-    GithubService(GithubFeignClient githubFeignClient) {
+    GithubService(GithubFeignClient githubFeignClient, GithubMapper githubMapper) {
         this.githubFeignClient = githubFeignClient;
+        this.githubMapper = githubMapper;
     }
 
-    public List<GithubRepository> makeGetAllReposRequest(String username) {
-        List<GithubRepository> repos = githubFeignClient.fetchAllUserRepos(username);
-        System.out.println(repos);
-        return repos;
+    private List<GithubRepository> fetchUserRepos(String username) {
+        return githubFeignClient.fetchAllUserRepos(username).stream()
+                .filter(githubRepository -> !githubRepository.fork()).toList();
     }
 
-    public List<GithubBranch> makeGetAllRepoBranchesRequest(String owner, String repo) {
-        List<GithubBranch> branches = githubFeignClient.fetchAllRepoBranches(owner, repo);
-        System.out.println(branches);
-        return branches;
+    private List<GithubBranch> fetchRepoBranches(String owner, String repo) {
+        return githubFeignClient.fetchAllRepoBranches(owner, repo);
     }
 
-    public List<Branch> mapGithubBranchesToResponseBranches(List<GithubBranch> githubBranches) {
-        List<Branch> repoBranches = new ArrayList<>();
-        githubBranches.forEach(githubBranch -> repoBranches.add(
-                new Branch(githubBranch.name(), githubBranch.commit().sha())
-        ));
-        return repoBranches;
-    }
 
-    public List<GithubProxyRepositoryDto> makeServerResponse(String username) {
-        List<String> reposNames = makeGetAllReposRequest(username).stream()
-                .map(GithubRepository::name).toList();
+    public List<GithubProxyRepositoryDto> getUserReposWithBranches(String username) {
+        List<GithubRepository> repos = fetchUserRepos(username);
         List<GithubProxyRepositoryDto> userRepositories = new ArrayList<>();
 
-        for (String repoName : reposNames) {
-            userRepositories.add(new GithubProxyRepositoryDto(repoName, username,
-                    mapGithubBranchesToResponseBranches(makeGetAllRepoBranchesRequest(username, repoName)
-            )));
+        for (GithubRepository repo : repos) {
+            String owner = repo.owner().login();
+            List<GithubBranch> branches = fetchRepoBranches(owner, repo.name());
+            List<Branch> mappedBranches = githubMapper.mapGithubBranchesToResponseBranches(branches);
+
+            userRepositories.add(new GithubProxyRepositoryDto(
+                    repo.name(), owner, mappedBranches
+            ));
         }
         return userRepositories;
     }

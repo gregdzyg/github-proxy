@@ -18,9 +18,9 @@ public class GithubController {
         this.service = service;
     }
 
-    @GetMapping("/repos/{username}")
+    @GetMapping(value = "/repos/{username}", produces = "application/json")
     ResponseEntity<GithubProxyResponseDto> getAllReposByUsername(@PathVariable String username) {
-        List<GithubProxyRepositoryDto> repositoriesList = service.makeServerResponse(username);
+        List<GithubProxyRepositoryDto> repositoriesList = service.getUserReposWithBranches(username);
         GithubProxyResponseDto response = new GithubProxyResponseDto(repositoriesList);
         return ResponseEntity.ok(response);
     }
